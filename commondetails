@@ -1,0 +1,403 @@
+const express = require('express');
+const router = express.Router();
+const { sql, poolPromise } = require('./dbconnect')
+
+router.get('/branch', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query('select branch_id as ID, branch_name as Name from Branch_Master');
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+router.get('/godown', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query('select GM_ID as ID, GM_Name as Name from GoDown_Master');
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+router.get('/cities', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query('select GM_ID as ID, GM_Name as Name from GoDown_Master');
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+router.get('/product', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT 
+        [PM_id] AS ID,
+        [PM_maxid],
+        [pm_name] AS Product,
+        [pm_brand] AS Brand,
+        [pm_hsncode] AS HsnCode,
+        [pm_nqty] AS Miniqty,
+        [pm_purprice] AS PurchasePrice,
+        [pm_mrpprice] AS Mrpprice,
+        [pm_GST] AS Gst,
+        [pm_Cess] AS Cess,
+        [pm_EmpCom],
+        [pm_ratetype] AS RateType
+      FROM [Product_Master]
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+router.post('/product', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT 
+        [PM_id] AS ID,
+        [PM_maxid],
+        [pm_name] AS Product,
+        [pm_brand] AS Brand,
+        [pm_hsncode] AS HsnCode,
+        [pm_nqty] AS Miniqty,
+        [pm_purprice] AS PurchasePrice,
+        [pm_mrpprice] AS Mrpprice,
+        [pm_GST] AS Gst,
+        [pm_Cess] AS Cess,
+        [pm_EmpCom],
+        [pm_ratetype] AS RateType
+      FROM [Product_Master]
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+
+router.post('/test', async (req, res) => {
+  let pool = null;
+  
+  try {
+    const { server, port, database, useWindowsAuth, username, password } = req.body;
+    
+    console.log('Connection test request:', { server, port, database, useWindowsAuth });
+    
+    // Validate required parameters
+    if (!server || !database) {
+      return res.status(400).json({
+        success: false,
+        message: 'Server and database name are required'
+      });
+    }
+
+    // Build connection config based on authentication type
+    const connectionConfig = {
+      server: server,
+      port: parseInt(port) || 1433, // Default SQL Server port
+      database: database,
+      options: {
+        encrypt: false,
+        trustServerCertificate: true,
+        enableArithAbort: true,
+        connectTimeout: 15000,
+        requestTimeout: 15000
+      }
+    };
+
+    // Add authentication details
+    if (useWindowsAuth) {
+      connectionConfig.options.trustedConnection = true;
+    } else {
+      if (!username || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Username and password are required for SQL authentication'
+        });
+      }
+      connectionConfig.user = username;
+      connectionConfig.password = password;
+    }
+
+    // Test the connection
+    pool = await sql.connect(connectionConfig);
+    
+    // Execute a simple query to verify connection
+    const result = await pool.request().query('SELECT @@VERSION AS version');
+    
+    res.json({
+      success: true,
+      message: 'Database connection successful',
+      version: result.recordset[0].version
+    });
+    
+  } catch (error) {
+    console.error('Connection test failed:', error);
+    
+    let errorMessage = error.message;
+    if (error.code === 'ELOGIN') {
+      errorMessage = 'Login failed. Check username/password.';
+    } else if (error.code === 'ESOCKET') {
+      errorMessage = 'Cannot connect to server. Check server IP/port.';
+    } else if (error.code === 'EDESTCLOSED') {
+      errorMessage = 'Connection closed by server.';
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    // Close connection if it was opened
+    if (pool && pool.connected) {
+      try {
+        await pool.close();
+      } catch (closeError) {
+        console.error('Error closing connection:', closeError);
+      }
+    }
+  }
+});
+router.get('/dashboarddetails', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const request = pool.request();
+
+    const result = await request.query(`
+SELECT 
+  (SELECT COUNT(*) FROM Product_Master WHERE pm_Status = 'A') AS ProductCount,
+  (SELECT COUNT(*) FROM Customer_Master WHERE Cus_Status = 'A') AS CustomerCount,
+  (SELECT COUNT(DISTINCT Sal_Billno) FROM Sales) AS OrderCount,
+  (SELECT ISNULL(SUM(sal_qty * sal_rate) - SUM(sal_qty * sal_purrate), 0) 
+     FROM Sales 
+     WHERE CONVERT(DATE, sal_date) = CONVERT(DATE, GETDATE())) AS TodayRevenue,
+  (SELECT ISNULL(SUM(sal_qty * sal_rate) - SUM(sal_qty * sal_purrate), 0) 
+     FROM Sales 
+     WHERE CONVERT(DATE, sal_date) BETWEEN DATEADD(DAY, -7, CONVERT(DATE, GETDATE())) AND CONVERT(DATE, GETDATE())) AS Last7DaysRevenue;
+    `);
+
+    const row = (result.recordset && result.recordset[0]) ? result.recordset[0] : {};
+    res.json(row);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+router.get('/recentsales', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const request = pool.request();
+
+    const result = await request.query(`
+      SELECT 
+        Sal_Billno,
+        Sal_Cusname AS CustomerName,
+        CONVERT(DECIMAL(18,2),
+          SUM(
+            ((Sal_qty * Sal_rate) 
+              - ((Sal_qty * Sal_rate) * (Sal_DiscPer+sal_PDiscper+Sal_oDiscPer) / 100) 
+              - (Sal_DiscAmt+Sal_oDiscAmt) 
+              + (((Sal_qty * Sal_rate) 
+                  - ((Sal_qty * Sal_rate) * (Sal_DiscPer+sal_PDiscper+Sal_oDiscPer) / 100) 
+                  - (Sal_DiscAmt+Sal_oDiscAmt)) * (Sal_Gst+Sal_cess) /100)
+            )
+            + ISNULL(Sal_freight,0)
+            - ISNULL(Sal_TDisc,0)
+            + ISNULL(Sal_rent,0)
+            + ISNULL(Sal_labour,0)
+          )
+        ) AS Net
+      FROM Sales
+      GROUP BY Sal_Billno, Sal_Cusname
+      ORDER BY Sal_Billno DESC
+      OFFSET 0 ROWS FETCH NEXT 5 ROWS ONLY
+    `);
+
+    res.json(result.recordset); // ✅ return all rows
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+
+router.get('/productsearch', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const request = pool.request();
+
+    const result = await request.query(`
+      SELECT  
+        PM_id         AS ID,
+        pm_name       AS Product,
+        pm_tname      AS TamilProduct,
+        pm_brand      AS Brand,
+        pm_hsncode    AS HSNCode,
+        pm_GST        AS [GSTper],
+        pm_Cess       AS Cess,
+        pm_Code       AS Code,
+        pm_type       AS Type,
+        pm_branch     AS Branch,
+        pm_ratetype   AS RateType,
+        pm_barcode    AS Barcode
+      FROM 
+        Product_Master
+      WHERE 
+        pm_Status = 'A'
+    `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.message);
+  }
+});
+router.get('/productunit', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const request = pool.request();
+
+    console.log("Fetching product units...");
+
+    const query = `
+      SELECT * FROM (
+          SELECT 
+              u.uom_proid AS productId,   -- ✅ Added missing comma
+              u.uom_name AS UOM,
+              (
+                  SELECT TOP 1 ISNULL(um.uom_wholes, 0) 
+                  FROM uommaster um 
+                  WHERE um.uom_proid = u.uom_proid 
+                    AND um.uom_name = u.uom_name
+              ) AS SalRate,
+              ISNULL(STK_PRate, 0) AS PurRate,
+              CONVERT(decimal(18, 2), ISNULL(SUM(
+                  (ISNULL(STK_QtyIN, 0) / NULLIF(STK_PQtyIN, 0)) - 
+                  (ISNULL(STK_QtyOUT, 0) / NULLIF(STK_PQtyOut, 0))
+              ), 0)) AS Stock
+          FROM 
+              uommaster u
+          LEFT JOIN Stock_Table s 
+              ON s.STK_Prodid = u.uom_proid 
+              AND s.stk_size = u.uom_name
+          GROUP BY 
+              u.uom_name, u.uom_proid, STK_PRate
+      ) AS x
+    `;
+
+    const result = await request.query(query);
+    console.log(result)
+    res.json(result.recordset);
+
+  } catch (err) {
+    console.error("Error in /productunit:", err);
+    res.status(500).send(err.message);
+  }
+});
+
+
+
+
+
+
+router.get('/customer', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const request = pool.request(); // ✅ you missed this line
+    const status = req.query.status;
+
+    let query = `SELECT Cus_ID AS ID, Cus_Name AS Name ,Cus_GSTIN as GSTIN,Cus_PStatus as Type FROM Customer_Master WHERE Cus_Status = 'A'`;
+
+    // Optional: Add filter if `status` is passed and not "All"
+    if (status && status !== 'All') {
+      query += ` AND Cus_PStatus = @status`;
+      request.input('status', sql.VarChar, status);
+    }
+
+    const result = await request.query(query);
+    res.json(result.recordset);
+
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ 
+      error: 'Failed to fetch customers',
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
+  }
+});
+
+router.get('/customertype', async (req, res) => {  // Changed to lowercase 'customer'
+  try {
+    const pool = await poolPromise;
+    const status = req.query.status;
+    console.log(status)
+    
+    let query = `SELECT [Cus_ID] as ID
+      
+      ,[Cus_Name] as Name
+      ,[Cus_Address] as Address
+      ,[Cus_City] as City
+      ,[Cus_ContactNo] as ContactNo
+      ,[Cus_GSTIN] as GstIn
+      
+    
+  FROM [Customer_Master] where Cus_Status='A'`;
+    
+    const params = {};
+    
+    if (status && status !== 'All') {
+      query += ' AND Cus_PStatus = @status';
+      params.status = status;
+    }
+
+    const request = pool.request();
+    
+    if (params.status) {
+      request.input('status', sql.VarChar, params.status);
+    }
+
+    const result = await request.query(query);
+     console.log(result.recordset)
+    res.json(result.recordset);
+   
+
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ 
+      error: 'Failed to fetch customers',
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
+  }
+});
+router.get('/referencevalue', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const request = pool.request(); // Added missing request declaration
+    
+    const query = `SELECT RG_vCode as [Group], RGv_vcode as Code, RGV_vDesciption as Name, 
+                  RG_iID as ID, RGV_remarks as Remarks, RGV_Format as Format, rgv_line AS Head 
+                  FROM ReferenceGroup_Value 
+                  LEFT OUTER JOIN Reference_Group ON RGV_iRG_ID=RG_iID 
+                  WHERE RGV_vStatus='A' 
+                  ORDER BY RGV_Orderby asc`;
+    
+    const result = await request.query(query);
+    res.json(result.recordset);
+    
+  } catch (err) {
+    console.error('Database error:', err);
+    res.status(500).json({ 
+      error: 'Failed to fetch reference values',
+      details: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+    });
+  }
+});
+module.exports = router;

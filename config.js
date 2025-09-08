@@ -1,8 +1,8 @@
 const config = {
   user: 'sa',
-  password: '12345',
-  server: '192.168.0.16',
-  port: 1435,
+  password: 'GITsol@#@123',
+  server: '103.124.152.212',
+  port: 52022,
   database: 'tpmfinalcurrentlast',
   options: {
     encrypt: false,

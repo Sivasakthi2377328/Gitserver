@@ -69,7 +69,7 @@ router.post('/customerbalanceinsert', async (req, res) => {
       .input('CB_Status', sql.Char(1), CB_Status)
       .input('CB_PType', sql.VarChar(sql.MAX), CB_PType)
       .input('CB_RefNo', sql.VarChar(sql.MAX), CB_RefNo)
-      .input('CB_Remarks', sql.VarChar(sql.MAX), CB_Remarks)
+      .input('CB_Remarks', sql.VarChar(sql.MAX), 'Mobile')
       .input('CB_CDate', sql.DateTime, CB_CDate)
       .input('CB_User', sql.Int, CB_User)
       .input('CB_RcdStatus', sql.Char(1), CB_RcdStatus)
@@ -81,7 +81,7 @@ router.post('/customerbalanceinsert', async (req, res) => {
       .input('cb_credittype', sql.VarChar(sql.MAX), cb_credittype)
       .input('cb_accounts', sql.Int, cb_accounts);
 
-    await request.execute('pr_insert_Balance');
+    await request.execute('pr_insert_Balance_mobile');
 
     res.status(200).json({ message: 'Customer balance inserted successfully' });
   } catch (err) {

@@ -264,7 +264,9 @@ router.get('/productunit', async (req, res) => {
   try {
     const pool = await poolPromise;
     const request = pool.request();
-
+     const accid = req.query.accid;
+    const prodid = req.query.prod_id
+     request.input('prodid', prodid);
     console.log("Fetching product units...");
 
     const query = `
@@ -278,7 +280,7 @@ router.get('/productunit', async (req, res) => {
                   WHERE um.uom_proid = u.uom_proid 
                     AND um.uom_name = u.uom_name
               ) AS SalRate,
-              ISNULL(STK_PRate, 0) AS PurRate,
+              0 AS PurRate,
               CONVERT(decimal(18, 2), ISNULL(SUM(
                   (ISNULL(STK_QtyIN, 0) / NULLIF(STK_PQtyIN, 0)) - 
                   (ISNULL(STK_QtyOUT, 0) / NULLIF(STK_PQtyOut, 0))
@@ -287,9 +289,9 @@ router.get('/productunit', async (req, res) => {
               uommaster u
           LEFT JOIN Stock_Table s 
               ON s.STK_Prodid = u.uom_proid 
-              AND s.stk_size = u.uom_name
+              AND s.stk_size = u.uom_name where s.STK_Prodid = @prodid
           GROUP BY 
-              u.uom_name, u.uom_proid, STK_PRate
+              u.uom_name, u.uom_proid
       ) AS x
     `;
 
@@ -303,6 +305,48 @@ router.get('/productunit', async (req, res) => {
   }
 });
 
+
+router.get('/productunitall', async (req, res) => {
+  try {
+    const pool = await poolPromise;
+  
+    console.log("Fetching product units...");
+
+    const query = `
+      SELECT * FROM (
+          SELECT 
+              u.uom_proid AS productId,   -- ✅ Added missing comma
+              u.uom_name AS UOM,
+              (
+                  SELECT TOP 1 ISNULL(um.uom_wholes, 0) 
+                  FROM uommaster um 
+                  WHERE um.uom_proid = u.uom_proid 
+                    AND um.uom_name = u.uom_name
+              ) AS SalRate,
+              0 AS PurRate,
+              CONVERT(decimal(18, 2), ISNULL(SUM(
+                  (ISNULL(STK_QtyIN, 0) / NULLIF(STK_PQtyIN, 0)) - 
+                  (ISNULL(STK_QtyOUT, 0) / NULLIF(STK_PQtyOut, 0))
+              ), 0)) AS Stock
+          FROM 
+              uommaster u
+          LEFT JOIN Stock_Table s 
+              ON s.STK_Prodid = u.uom_proid 
+              AND s.stk_size = u.uom_name 
+          GROUP BY 
+              u.uom_name, u.uom_proid
+      ) AS x
+    `;
+
+    const result = await request.query(query);
+    console.log(result)
+    res.json(result.recordset);
+
+  } catch (err) {
+    console.error("Error in /productunit:", err);
+    res.status(500).send(err.message);
+  }
+});
 
 
 

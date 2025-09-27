@@ -1,9 +1,9 @@
 const config = {
-  user: 'sa',
+  user: 'GenuineITSolution',
   password: 'GITsol@#@123',
-  server: '103.124.152.212',
+  server: '46.37.122.249',
   port: 52022,
-  database: 'tpmfinalcurrentlast',
+  database: 'DPI_TPM',
   options: {
     encrypt: false,
     trustServerCertificate: true
